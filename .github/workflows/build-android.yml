@@ -29,7 +29,6 @@ jobs:
           mkdir -p BatteryApp/app/src/main/java/com/example/batteryapp
           mkdir -p BatteryApp/app/src/main/res/layout
           mkdir -p BatteryApp/app/src/main/res/values
-          mkdir -p BatteryApp/gradle/wrapper
 
       - name: Write settings.gradle
         run: |
@@ -116,31 +115,12 @@ jobs:
           }
           EOF
 
-      - name: Write gradle-wrapper.properties
-        run: |
-          cat > BatteryApp/gradle/wrapper/gradle-wrapper.properties << 'EOF'
-          distributionBase=GRADLE_USER_HOME
-          distributionPath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-8.4-bin.zip
-          zipStoreBase=GRADLE_USER_HOME
-          zipStorePath=wrapper/dists
-          EOF
-
       - name: Write gradle.properties
         run: |
           cat > BatteryApp/gradle.properties << 'EOF'
           org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
           android.useAndroidX=true
-          android.nonTransitiveRClass=true
           EOF
-
-      - name: Write gradlew
-        run: |
-          cat > BatteryApp/gradlew << 'EOF'
-          #!/bin/sh
-          exec gradle "$@"
-          EOF
-          chmod +x BatteryApp/gradlew
 
       - name: Write AndroidManifest.xml
         run: |
@@ -252,11 +232,10 @@ jobs:
           }
           EOF
 
-      - name: Ensure gradlew exists and is executable
+      - name: Generate Proper Gradle Wrapper (The Fix)
         working-directory: ./BatteryApp
         run: |
-          wget -q https://raw.githubusercontent.com/gradle/gradle/master/gradlew
-          chmod +x gradlew
+          gradle wrapper --gradle-version 8.4 --distribution-type all
 
       - name: Build Debug APK
         working-directory: ./BatteryApp
