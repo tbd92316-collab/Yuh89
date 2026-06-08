@@ -20,13 +20,10 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: 'gradle'
+          # cache: 'gradle' <-- Yahan se hata diya gaya hai taaki empty repo par crash na ho
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
 
       - name: Create Project Structure
         run: |
