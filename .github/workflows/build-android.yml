@@ -126,6 +126,14 @@ jobs:
           zipStorePath=wrapper/dists
           EOF
 
+      - name: Write gradle.properties
+        run: |
+          cat > BatteryApp/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+
       - name: Write gradlew
         run: |
           cat > BatteryApp/gradlew << 'EOF'
@@ -243,6 +251,12 @@ jobs:
               }
           }
           EOF
+
+      - name: Ensure gradlew exists and is executable
+        working-directory: ./BatteryApp
+        run: |
+          wget -q https://raw.githubusercontent.com/gradle/gradle/master/gradlew
+          chmod +x gradlew
 
       - name: Build Debug APK
         working-directory: ./BatteryApp
