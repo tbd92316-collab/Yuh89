@@ -1,4 +1,4 @@
-name: Build Android Screen Recorder APK
+name: Build Battery and Temp Monitor APK
 
 on:
   push:
@@ -28,22 +28,16 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Create project directory structure
+      - name: Create Project Structure
         run: |
-          mkdir -p ScreenRecorder/app/src/main/java/com/example/screenrecorder
-          mkdir -p ScreenRecorder/app/src/main/res/layout
-          mkdir -p ScreenRecorder/app/src/main/res/values
-          mkdir -p ScreenRecorder/app/src/main/res/drawable
-          mkdir -p ScreenRecorder/app/src/main/res/mipmap-mdpi
-          mkdir -p ScreenRecorder/app/src/main/res/mipmap-hdpi
-          mkdir -p ScreenRecorder/app/src/main/res/mipmap-xhdpi
-          mkdir -p ScreenRecorder/app/src/main/res/mipmap-xxhdpi
-          mkdir -p ScreenRecorder/app/src/main/res/mipmap-xxxhdpi
-          mkdir -p ScreenRecorder/gradle/wrapper
+          mkdir -p BatteryApp/app/src/main/java/com/example/batteryapp
+          mkdir -p BatteryApp/app/src/main/res/layout
+          mkdir -p BatteryApp/app/src/main/res/values
+          mkdir -p BatteryApp/gradle/wrapper
 
       - name: Write settings.gradle
         run: |
-          cat > ScreenRecorder/settings.gradle << 'EOF'
+          cat > BatteryApp/settings.gradle << 'EOF'
           pluginManagement {
               repositories {
                   google()
@@ -58,13 +52,13 @@ jobs:
                   mavenCentral()
               }
           }
-          rootProject.name = "ScreenRecorder"
+          rootProject.name = "BatteryTempMonitor"
           include ':app'
           EOF
 
       - name: Write root build.gradle
         run: |
-          cat > ScreenRecorder/build.gradle << 'EOF'
+          cat > BatteryApp/build.gradle << 'EOF'
           buildscript {
               ext.kotlin_version = '1.8.22'
               repositories {
@@ -80,18 +74,18 @@ jobs:
 
       - name: Write app/build.gradle
         run: |
-          cat > ScreenRecorder/app/build.gradle << 'EOF'
+          cat > BatteryApp/app/build.gradle << 'EOF'
           plugins {
               id 'com.android.application'
               id 'org.jetbrains.kotlin.android'
           }
 
           android {
-              namespace 'com.example.screenrecorder'
+              namespace 'com.example.batteryapp'
               compileSdk 33
 
               defaultConfig {
-                  applicationId "com.example.screenrecorder"
+                  applicationId "com.example.batteryapp"
                   minSdk 21
                   targetSdk 33
                   versionCode 1
@@ -109,16 +103,12 @@ jobs:
               }
 
               compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_1_7
-                  targetCompatibility JavaVersion.VERSION_1_7
+                  sourceCompatibility JavaVersion.VERSION_1_8
+                  targetCompatibility JavaVersion.VERSION_1_8
               }
 
               kotlinOptions {
-                  jvmTarget = '1.7'
-              }
-
-              buildFeatures {
-                  viewBinding true
+                  jvmTarget = '1.8'
               }
           }
 
@@ -127,14 +117,12 @@ jobs:
               implementation 'androidx.appcompat:appcompat:1.6.1'
               implementation 'com.google.android.material:material:1.8.0'
               implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-              implementation 'androidx.activity:activity-ktx:1.6.1'
-              implementation 'androidx.lifecycle:lifecycle-service:2.5.1'
           }
           EOF
 
       - name: Write gradle-wrapper.properties
         run: |
-          cat > ScreenRecorder/gradle/wrapper/gradle-wrapper.properties << 'EOF'
+          cat > BatteryApp/gradle/wrapper/gradle-wrapper.properties << 'EOF'
           distributionBase=GRADLE_USER_HOME
           distributionPath=wrapper/dists
           distributionUrl=https\://services.gradle.org/distributions/gradle-8.0-bin.zip
@@ -142,257 +130,130 @@ jobs:
           zipStorePath=wrapper/dists
           EOF
 
-      - name: Write gradlew (delegates to system Gradle)
+      - name: Write gradlew
         run: |
-          cat > ScreenRecorder/gradlew << 'EOF'
+          cat > BatteryApp/gradlew << 'EOF'
           #!/bin/sh
           exec gradle "$@"
           EOF
-          chmod +x ScreenRecorder/gradlew
+          chmod +x BatteryApp/gradlew
 
       - name: Write AndroidManifest.xml
         run: |
-          cat > ScreenRecorder/app/src/main/AndroidManifest.xml << 'EOF'
+          cat > BatteryApp/app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-              <uses-permission android:name="android.permission.RECORD_AUDIO"/>
-              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-                  android:maxSdkVersion="28"/>
-              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-                  android:maxSdkVersion="32"/>
-              <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-              <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
-              <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-
               <application
                   android:allowBackup="true"
-                  android:icon="@mipmap/ic_launcher"
-                  android:label="Screen Recorder"
-                  android:supportsRtl="true">
-
+                  android:label="Battery Monitor"
+                  android:supportsRtl="true"
+                  android:theme="@style/Theme.AppCompat.Light.NoActionBar">
                   <activity
                       android:name=".MainActivity"
-                      android:configChanges="orientation|screenSize|keyboardHidden"
-                      android:exported="true"
-                      android:screenOrientation="portrait">
+                      android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
                           <category android:name="android.intent.category.LAUNCHER"/>
                       </intent-filter>
                   </activity>
-
-                  <service
-                      android:name=".RecordingService"
-                      android:enabled="true"
-                      android:exported="false"
-                      android:foregroundServiceType="mediaProjection"/>
-
               </application>
           </manifest>
           EOF
 
+      - name: Write activity_main.xml
+        run: |
+          cat > BatteryApp/app/src/main/res/layout/activity_main.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:orientation="vertical"
+              android:gravity="center"
+              android:background="#121212">
+
+              <TextView
+                  android:id="@+id/tvBatteryPercentage"
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:text="Battery: --%"
+                  android:textColor="#4CAF50"
+                  android:textSize="32sp"
+                  android:textStyle="bold"
+                  android:layout_marginBottom="20dp"/>
+
+              <TextView
+                  android:id="@+id/tvBatteryTemperature"
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:text="Temperature: --°C"
+                  android:textColor="#FF9800"
+                  android:textSize="32sp"
+                  android:textStyle="bold"/>
+          </LinearLayout>
+          EOF
+
       - name: Write MainActivity.kt
         run: |
-          cat > ScreenRecorder/app/src/main/java/com/example/screenrecorder/MainActivity.kt << 'EOF'
-          package com.example.screenrecorder
+          cat > BatteryApp/app/src/main/java/com/example/batteryapp/MainActivity.kt << 'EOF'
+          package com.example.batteryapp
 
-          import android.Manifest
-          import android.app.Activity
-          import android.content.ComponentName
+          import android.content.BroadcastReceiver
           import android.content.Context
           import android.content.Intent
-          import android.content.ServiceConnection
-          import android.content.pm.PackageManager
-          import android.media.projection.MediaProjectionManager
-          import android.net.Uri
-          import android.os.Build
+          import android.content.IntentFilter
+          import android.os.BatteryManager
           import android.os.Bundle
-          import android.os.IBinder
-          import android.provider.Settings
-          import android.view.View
-          import android.widget.Toast
-          import androidx.activity.result.contract.ActivityResultContracts
-          import androidx.appcompat.app.AlertDialog
+          import android.widget.TextView
           import androidx.appcompat.app.AppCompatActivity
-          import androidx.core.content.ContextCompat
-          import com.example.screenrecorder.databinding.ActivityMainBinding
 
           class MainActivity : AppCompatActivity() {
 
-              private lateinit var binding: ActivityMainBinding
-              private var recordingService: RecordingService? = null
-              private var isBound = false
-              private var isRecording = false
+              private lateinit var tvBatteryPercentage: TextView
+              private lateinit var tvBatteryTemperature: TextView
 
-              private val serviceConnection = object : ServiceConnection {
-                  override fun onServiceConnected(name: ComponentName?, service: BBinder?) {
-                      val binder = service as RecordingService.LocalBinder
-                      recordingService = binder.getService()
-                      isBound = true
-                  }
-                  override fun onServiceDisconnected(name: ComponentName?) {
-                      recordingService = null
-                      isBound = false
-                  }
-              }
+              private val batteryReceiver = object : BroadcastReceiver() {
+                  override fun onReceive(context: Context?, intent: Intent?) {
+                      if (intent?.action == Intent.ACTION_BATTERY_CHANGED) {
+                          val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                          val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                          val batteryPct = if (scale > 0) (level * 100 / scale.toFloat()) else 0f
+                          
+                          val temperature = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1)
+                          val tempCelsius = temperature / 10.0f
 
-              private val permissionLauncher = registerForActivityResult(
-                  ActivityResultContracts.RequestMultiplePermissions()
-              ) { permissions ->
-                  val allGranted = permissions.entries.all { it.value }
-                  if (allGranted) startScreenCapture() else showPermissionRationale()
-              }
-
-              private val mediaProjectionLauncher = registerForActivityResult(
-                  ActivityResultContracts.StartActivityForResult()
-              ) { result ->
-                  if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-                      startRecordingService(result.resultCode, result.data!!)
-                  } else {
-                      Toast.makeText(this, "Screen capture permission denied", Toast.LENGTH_SHORT).show()
-                      updateUI(false)
+                          tvBatteryPercentage.text = "Battery: ${batteryPct.toInt()}%"
+                          tvBatteryTemperature.text = "Temperature: $tempCelsius°C"
+                      }
                   }
               }
 
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
-                  binding = ActivityMainBinding.inflate(layoutInflater)
-                  setContentView(binding.root)
-                  setupUI()
+                  setContentView(R.layout.activity_main)
+
+                  tvBatteryPercentage = findViewById(R.id.tvBatteryPercentage)
+                  tvBatteryTemperature = findViewById(R.id.tvBatteryTemperature)
               }
 
-              private fun setupUI() {
-                  binding.btnRecord.setOnClickListener {
-                      if (!isRecording) checkPermissionsAndStart() else stopRecording()
-                  }
-                  binding.btnViewRecordings.setOnClickListener { openGallery() }
-                  updateUI(false)
+              override fun onResume() {
+                  super.onResume()
+                  val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+                  registerReceiver(batteryReceiver, filter)
               }
 
-              private fun checkPermissionsAndStart() {
-                  val needed = mutableListOf<String>()
-                  if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-                      != PackageManager.PERMISSION_GRANTED)
-                      needed.add(Manifest.permission.RECORD_AUDIO)
-                  if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
-                      ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                      != PackageManager.PERMISSION_GRANTED)
-                      needed.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                      ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                      != PackageManager.PERMISSION_GRANTED)
-                      needed.add(Manifest.permission.POST_NOTIFICATIONS)
-                  if (needed.isNotEmpty()) permissionLauncher.launch(needed.toTypedArray())
-                  else startScreenCapture()
+              override fun onPause() {
+                  super.onPause()
+                  unregisterReceiver(batteryReceiver)
               }
-
-              private fun startScreenCapture() {
-                  val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                  mediaProjectionLauncher.launch(mpm.createScreenCaptureIntent())
-              }
-
-              private fun startRecordingService(resultCode: Int, data: Intent) {
-                  val intent = Intent(this, RecordingService::class.java).apply {
-                      action = RecordingService.ACTION_START
-                      putExtra(RecordingService.EXTRA_RESULT_CODE, resultCode)
-                      putExtra(RecordingService.EXTRA_DATA, data)
-                  }
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
-                  else startService(intent)
-                  val bindIntent = Intent(this, RecordingService::class.java)
-                  bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE)
-                  updateUI(true)
-                  Toast.makeText(this, "Recording started", Toast.LENGTH_SHORT).show()
-              }
-
-              private fun stopRecording() {
-                  startService(Intent(this, RecordingService::class.java).apply {
-                      action = RecordingService.ACTION_STOP
-                  })
-                  updateUI(false)
-                  binding.cardPreview.visibility = View.getVisibilityString(View.VISIBLE)
-                  Toast.makeText(this, "Recording saved to gallery", Toast.LENGTH_LONG).show()
-              }
-
-              private fun updateUI(recording: Boolean) {
-                  isRecording = recording
-                  if (recording) {
-                      binding.btnRecord.text = "Stop Recording"
-                      binding.recordingIndicator.visibility = View.VISIBLE
-                      binding.tvStatus.text = "Recording in progress..."
-                      binding.cardPreview.visibility = View.GONE
-                  } else {
-                      binding.btnRecord.text = "Start Recording"
-                      binding.recordingIndicator.visibility = View.GONE
-                      binding.tvStatus.text = "Ready to record"
-                  }
-              }
-
-              private fun showPermissionRationale() {
-                  AlertDialog.Builder(this)
-                      .setTitle("Permissions Required")
-                      .setMessage("Permissions are needed to record your screen.")
-                      .setPositiveButton("Open Settings") { _, _ ->
-                          startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                              Uri.fromParts("package", packageName, null)))
-                      }
-                      .setNegativeButton("Cancel", null)
-                      .show()
-              }
-
-              private fun openGallery() {
-                  try {
-                      startActivity(Intent(Intent.ACTION_VIEW).apply {
-                          type = "video/*"
-                          flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                      })
-                  } catch (e: Exception) {
-                      Toast.makeText(this, "No video player found", Toast.LENGTH_SHORT).show()
-                  }
-              }
-
-              override fun onDestroy() {
-                  super.onDestroy()
-                  if (isBound) { unbindService(serviceConnection); isBound = false }
-              }
-          }
-          EOF
-
-      - name: Write RecordingService.kt
-        run: |
-          cat > ScreenRecorder/app/src/main/java/com/example/screenrecorder/RecordingService.kt << 'EOF'
-          package com.example.screenrecorder
-
-          import android.app.Service
-          import android.content.Intent
-          import android.os.Binder
-          import android.os.IBinder
-
-          class RecordingService : Service() {
-
-              companion object {
-                  const val ACTION_START = "ACTION_START"
-                  const val ACTION_STOP  = "ACTION_STOP"
-                  const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
-                  const val EXTRA_DATA        = "EXTRA_DATA"
-              }
-
-              inner class LocalBinder : Binder() {
-                  fun getService(): RecordingService = this@RecordingService
-              }
-
-              private val binder = LocalBinder()
-              override fun onBind(intent: Intent): IBinder = binder
           }
           EOF
 
       - name: Build Debug APK
-        working-directory: ./ScreenRecorder
+        working-directory: ./BatteryApp
         run: ./gradlew assembleDebug --no-daemon
 
-      - name: Upload Debug APK Artifact
+      - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: screen-recorder-apk
-          path: ScreenRecorder/app/build/outputs/apk/debug/app-debug.apk
+          name: Battery-Temp-Monitor-APK
+          path: BatteryApp/app/build/outputs/apk/debug/app-debug.apk
