@@ -232,10 +232,14 @@ jobs:
           }
           EOF
 
-      - name: Generate Proper Gradle Wrapper (The Fix)
-        working-directory: ./BatteryApp
+      - name: Generate Proper Gradle Wrapper (Bulletproof Hack)
         run: |
+          mkdir temp_wrapper
+          cd temp_wrapper
           gradle wrapper --gradle-version 8.4 --distribution-type all
+          cp -r gradle gradlew gradlew.bat ../BatteryApp/
+          cd ..
+          rm -rf temp_wrapper
 
       - name: Build Debug APK
         working-directory: ./BatteryApp
