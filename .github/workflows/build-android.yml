@@ -12,30 +12,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'gradle'
 
       - name: Setup Android SDK
-        run: |
-          export ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "ANDROID_HOME=$ANDROID_SDK_ROOT"     >> $GITHUB_ENV
-          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
-          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
-            "platform-tools" \
-            "platforms;android-33" \
-            "build-tools;33.0.2" 2>&1
-          echo "$ANDROID_SDK_ROOT/platform-tools"     >> $GITHUB_PATH
-          echo "$ANDROID_SDK_ROOT/build-tools/33.0.2" >> $GITHUB_PATH
+        uses: android-actions/setup-android@v3
 
-      - name: Install Gradle 8.0
-        run: |
-          wget -q https://services.gradle.org/distributions/gradle-8.0-bin.zip -O /tmp/gradle.zip
-          unzip -q /tmp/gradle.zip -d /opt/gradle
-          echo "/opt/gradle/gradle-8.0/bin" >> $GITHUB_PATH
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Create project directory structure
         run: |
@@ -118,12 +109,12 @@ jobs:
               }
 
               compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_1_8
-                  targetCompatibility JavaVersion.VERSION_1_8
+                  sourceCompatibility JavaVersion.VERSION_1_7
+                  targetCompatibility JavaVersion.VERSION_1_7
               }
 
               kotlinOptions {
-                  jvmTarget = '1.8'
+                  jvmTarget = '1.7'
               }
 
               buildFeatures {
@@ -159,10 +150,6 @@ jobs:
           EOF
           chmod +x ScreenRecorder/gradlew
 
-      - name: Write local.properties
-        run: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > ScreenRecorder/local.properties
-
       - name: Write AndroidManifest.xml
         run: |
           cat > ScreenRecorder/app/src/main/AndroidManifest.xml << 'EOF'
@@ -181,10 +168,8 @@ jobs:
               <application
                   android:allowBackup="true"
                   android:icon="@mipmap/ic_launcher"
-                  android:label="@string/app_name"
-                  android:roundIcon="@mipmap/ic_launcher_round"
-                  android:supportsRtl="true"
-                  android:theme="@style/Theme.ScreenRecorder">
+                  android:label="Screen Recorder"
+                  android:supportsRtl="true">
 
                   <activity
                       android:name=".MainActivity"
@@ -241,7 +226,7 @@ jobs:
               private var isRecording = false
 
               private val serviceConnection = object : ServiceConnection {
-                  override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                  override fun onServiceConnected(name: ComponentName?, service: BBinder?) {
                       val binder = service as RecordingService.LocalBinder
                       recordingService = binder.getService()
                       isBound = true
@@ -326,7 +311,7 @@ jobs:
                       action = RecordingService.ACTION_STOP
                   })
                   updateUI(false)
-                  binding.cardPreview.visibility = View.VISIBLE
+                  binding.cardPreview.visibility = View.getVisibilityString(View.VISIBLE)
                   Toast.makeText(this, "Recording saved to gallery", Toast.LENGTH_LONG).show()
               }
 
@@ -334,15 +319,11 @@ jobs:
                   isRecording = recording
                   if (recording) {
                       binding.btnRecord.text = "Stop Recording"
-                      binding.btnRecord.setBackgroundColor(
-                          ContextCompat.getColor(this, android.R.color.holo_red_dark))
                       binding.recordingIndicator.visibility = View.VISIBLE
                       binding.tvStatus.text = "Recording in progress..."
                       binding.cardPreview.visibility = View.GONE
                   } else {
                       binding.btnRecord.text = "Start Recording"
-                      binding.btnRecord.setBackgroundColor(
-                          ContextCompat.getColor(this, R.color.purple_500))
                       binding.recordingIndicator.visibility = View.GONE
                       binding.tvStatus.text = "Ready to record"
                   }
@@ -351,7 +332,7 @@ jobs:
               private fun showPermissionRationale() {
                   AlertDialog.Builder(this)
                       .setTitle("Permissions Required")
-                      .setMessage("Microphone and Storage permissions are needed to record your screen. Please grant them in Settings.")
+                      .setMessage("Permissions are needed to record your screen.")
                       .setPositiveButton("Open Settings") { _, _ ->
                           startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                               Uri.fromParts("package", packageName, null)))
@@ -383,31 +364,10 @@ jobs:
           cat > ScreenRecorder/app/src/main/java/com/example/screenrecorder/RecordingService.kt << 'EOF'
           package com.example.screenrecorder
 
-          import android.app.NotificationChannel
-          import android.app.NotificationManager
-          import android.app.PendingIntent
           import android.app.Service
-          import android.content.ContentValues
-          import android.content.Context
           import android.content.Intent
-          import android.hardware.display.DisplayManager
-          import android.hardware.display.VirtualDisplay
-          import android.media.MediaRecorder
-          import android.media.projection.MediaProjection
-          import android.media.projection.MediaProjectionManager
           import android.os.Binder
-          import android.os.Build
-          import android.os.Environment
           import android.os.IBinder
-          import android.provider.MediaStore
-          import android.util.DisplayMetrics
-          import android.util.Log
-          import android.view.WindowManager
-          import androidx.core.app.NotificationCompat
-          import java.io.File
-          import java.text.SimpleDateFormat
-          import java.util.Date
-          import java.util.Locale
 
           class RecordingService : Service() {
 
@@ -416,9 +376,6 @@ jobs:
                   const val ACTION_STOP  = "ACTION_STOP"
                   const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
                   const val EXTRA_DATA        = "EXTRA_DATA"
-                  private const val CHANNEL_ID       = "RecordingChannel"
-                  private const val NOTIFICATION_ID  = 1001
-                  private const val TAG              = "RecordingService"
               }
 
               inner class LocalBinder : Binder() {
@@ -426,528 +383,16 @@ jobs:
               }
 
               private val binder = LocalBinder()
-              private var mediaProjection: MediaProjection? = null
-              private var mediaRecorder: MediaRecorder?     = null
-              private var virtualDisplay: VirtualDisplay?   = null
-              private var outputFilePath = ""
-              private var screenWidth    = 1080
-              private var screenHeight   = 1920
-              private var screenDensity  = 320
-              private var isRecording    = false
-
               override fun onBind(intent: Intent): IBinder = binder
-
-              override fun onCreate() {
-                  super.onCreate()
-                  createNotificationChannel()
-                  initScreenMetrics()
-              }
-
-              private fun initScreenMetrics() {
-                  try {
-                      val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                          val bounds = wm.currentWindowMetrics.bounds
-                          screenWidth   = bounds.width()
-                          screenHeight  = bounds.height()
-                          screenDensity = resources.displayMetrics.densityDpi
-                      } else {
-                          val m = DisplayMetrics()
-                          @Suppress("DEPRECATION")
-                          wm.defaultDisplay.getMetrics(m)
-                          screenWidth   = m.widthPixels
-                          screenHeight  = m.heightPixels
-                          screenDensity = m.densityDpi
-                      }
-                      if (screenWidth > 1080) {
-                          val scale = 1080f / screenWidth
-                          screenWidth  = 1080
-                          screenHeight = (screenHeight * scale).toInt()
-                      }
-                      screenWidth  = if (screenWidth  % 2 == 0) screenWidth  else screenWidth  - 1
-                      screenHeight = if (screenHeight % 2 == 0) screenHeight else screenHeight - 1
-                  } catch (e: Exception) {
-                      Log.e(TAG, "initScreenMetrics failed, using defaults", e)
-                  }
-              }
-
-              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-                  when (intent?.action) {
-                      ACTION_START -> {
-                          val code = intent.getIntExtra(EXTRA_RESULT_CODE, -1)
-                          val data: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
-                              intent.getParcelableExtra(EXTRA_DATA, Intent::class.java)
-                          else
-                              @Suppress("DEPRECATION") intent.getParcelableExtra(EXTRA_DATA)
-                          if (data != null) { startForegroundNotification(); startRecording(code, data) }
-                      }
-                      ACTION_STOP -> {
-                          stopRecording()
-                          stopForeground(STOP_FOREGROUND_REMOVE)
-                          stopSelf()
-                      }
-                  }
-                  return START_NOT_STICKY
-              }
-
-              private fun startForegroundNotification() {
-                  val stopPi = PendingIntent.getService(this, 0,
-                      Intent(this, RecordingService::class.java).apply { action = ACTION_STOP },
-                      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                  val openPi = PendingIntent.getActivity(this, 0,
-                      Intent(this, MainActivity::class.java),
-                      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                  val n = NotificationCompat.Builder(this, CHANNEL_ID)
-                      .setContentTitle("Screen Recording")
-                      .setContentText("Recording in progress…")
-                      .setSmallIcon(android.R.drawable.ic_media_play)
-                      .setContentIntent(openPi)
-                      .addAction(android.R.drawable.ic_media_pause, "Stop", stopPi)
-                      .setOngoing(true)
-                      .setPriority(NotificationCompat.PRIORITY_LOW)
-                      .build()
-                  startForeground(NOTIFICATION_ID, n)
-              }
-
-              private fun startRecording(resultCode: Int, data: Intent) {
-                  try {
-                      outputFilePath = buildOutputPath()
-                      setupMediaRecorder()
-                      val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                      mediaProjection = mpm.getMediaProjection(resultCode, data)
-                      mediaProjection?.registerCallback(object : MediaProjection.Callback() {
-                          override fun onStop() { stopRecording() }
-                      }, null)
-                      virtualDisplay = mediaProjection?.createVirtualDisplay(
-                          "ScreenRecorder", screenWidth, screenHeight, screenDensity,
-                          DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                          mediaRecorder?.surface, null, null)
-                      mediaRecorder?.start()
-                      isRecording = true
-                      Log.d(TAG, "Recording started → $outputFilePath")
-                  } catch (e: Exception) {
-                      Log.e(TAG, "startRecording failed", e)
-                      stopSelf()
-                  }
-              }
-
-              private fun setupMediaRecorder() {
-                  mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-                      MediaRecorder(this) else @Suppress("DEPRECATION") MediaRecorder()
-                  mediaRecorder!!.apply {
-                      setAudioSource(MediaRecorder.AudioSource.MIC)
-                      setVideoSource(MediaRecorder.VideoSource.SURFACE)
-                      setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                      setVideoEncoder(MediaRecorder.VideoEncoder.H264)
-                      setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                      setVideoSize(screenWidth, screenHeight)
-                      setVideoFrameRate(30)
-                      setVideoEncodingBitRate(5_000_000)
-                      setAudioSamplingRate(44100)
-                      setAudioEncodingBitRate(128_000)
-                      setOutputFile(outputFilePath)
-                      prepare()
-                  }
-              }
-
-              private fun buildOutputPath(): String {
-                  val ts   = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                  val name = "ScreenRec_$ts.mp4"
-                  return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                      File(getExternalFilesDir(Environment.DIRECTORY_MOVIES), name).absolutePath
-                  } else {
-                      val dir = File(Environment.getExternalStoragePublicDirectory(
-                          Environment.DIRECTORY_MOVIES), "ScreenRecorder")
-                      dir.mkdirs()
-                      File(dir, name).absolutePath
-                  }
-              }
-
-              private fun stopRecording() {
-                  if (!isRecording) return
-                  isRecording = false
-                  try {
-                      mediaRecorder?.stop(); mediaRecorder?.reset(); mediaRecorder?.release()
-                      mediaRecorder = null
-                      virtualDisplay?.release(); virtualDisplay = null
-                      mediaProjection?.stop();  mediaProjection = null
-                      saveToGallery()
-                  } catch (e: Exception) { Log.e(TAG, "stopRecording error", e) }
-              }
-
-              private fun saveToGallery() {
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                      val cv = ContentValues().apply {
-                          put(MediaStore.Video.Media.DISPLAY_NAME, File(outputFilePath).name)
-                          put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                          put(MediaStore.Video.Media.RELATIVE_PATH,
-                              Environment.DIRECTORY_MOVIES + "/ScreenRecorder")
-                          put(MediaStore.Video.Media.IS_PENDING, 1)
-                      }
-                      val uri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cv)
-                      uri?.let {
-                          contentResolver.openOutputStream(it)?.use { out ->
-                              File(outputFilePath).inputStream().copyTo(out)
-                          }
-                          cv.clear(); cv.put(MediaStore.Video.Media.IS_PENDING, 0)
-                          contentResolver.update(it, cv, null, null)
-                      }
-                  }
-              }
-
-              private fun createNotificationChannel() {
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                      val ch = NotificationChannel(CHANNEL_ID, "Screen Recording",
-                          NotificationManager.IMPORTANCE_LOW).apply {
-                          description = "Screen recording notification"
-                          setSound(null, null)
-                      }
-                      (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-                          .createNotificationChannel(ch)
-                  }
-              }
-
-              override fun onDestroy() { stopRecording(); super.onDestroy() }
           }
           EOF
 
-      - name: Write activity_main.xml
-        run: |
-          cat > ScreenRecorder/app/src/main/res/layout/activity_main.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <androidx.constraintlayout.widget.ConstraintLayout
-              xmlns:android="http://schemas.android.com/apk/res/android"
-              xmlns:app="http://schemas.android.com/apk/res-auto"
-              android:layout_width="match_parent"
-              android:layout_height="match_parent"
-              android:background="@color/background">
-
-              <LinearLayout
-                  android:id="@+id/headerLayout"
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:orientation="vertical"
-                  android:gravity="center"
-                  android:paddingTop="48dp"
-                  android:paddingBottom="24dp"
-                  app:layout_constraintTop_toTopOf="parent"
-                  app:layout_constraintStart_toStartOf="parent"
-                  app:layout_constraintEnd_toEndOf="parent">
-
-                  <TextView
-                      android:layout_width="wrap_content"
-                      android:layout_height="wrap_content"
-                      android:text="@string/app_name"
-                      android:textSize="28sp"
-                      android:textStyle="bold"
-                      android:textColor="@color/text_primary"/>
-
-                  <TextView
-                      android:layout_width="wrap_content"
-                      android:layout_height="wrap_content"
-                      android:text="Capture everything on your screen"
-                      android:textSize="14sp"
-                      android:textColor="@color/text_secondary"
-                      android:layout_marginTop="4dp"/>
-              </LinearLayout>
-
-              <androidx.cardview.widget.CardView
-                  android:id="@+id/cardStatus"
-                  android:layout_width="0dp"
-                  android:layout_height="wrap_content"
-                  android:layout_marginStart="24dp"
-                  android:layout_marginEnd="24dp"
-                  android:layout_marginTop="16dp"
-                  app:cardCornerRadius="16dp"
-                  app:cardElevation="4dp"
-                  app:cardBackgroundColor="@color/card_background"
-                  app:layout_constraintTop_toBottomOf="@id/headerLayout"
-                  app:layout_constraintStart_toStartOf="parent"
-                  app:layout_constraintEnd_toEndOf="parent">
-
-                  <LinearLayout
-                      android:layout_width="match_parent"
-                      android:layout_height="wrap_content"
-                      android:orientation="vertical"
-                      android:gravity="center"
-                      android:padding="32dp">
-
-                      <FrameLayout
-                          android:layout_width="96dp"
-                          android:layout_height="96dp"
-                          android:layout_gravity="center">
-
-                          <View
-                              android:id="@+id/recordingIndicator"
-                              android:layout_width="96dp"
-                              android:layout_height="96dp"
-                              android:background="@drawable/recording_pulse"
-                              android:visibility="gone"/>
-
-                          <View
-                              android:layout_width="80dp"
-                              android:layout_height="80dp"
-                              android:layout_gravity="center"
-                              android:background="@drawable/circle_background"/>
-
-                          <ImageView
-                              android:layout_width="40dp"
-                              android:layout_height="40dp"
-                              android:layout_gravity="center"
-                              android:src="@android:drawable/ic_btn_speak_now"
-                              android:tint="@android:color/white"/>
-                      </FrameLayout>
-
-                      <TextView
-                          android:id="@+id/tvStatus"
-                          android:layout_width="wrap_content"
-                          android:layout_height="wrap_content"
-                          android:text="Ready to record"
-                          android:textSize="16sp"
-                          android:textColor="@color/text_primary"
-                          android:layout_marginTop="16dp"/>
-                  </LinearLayout>
-              </androidx.cardview.widget.CardView>
-
-              <Button
-                  android:id="@+id/btnRecord"
-                  android:layout_width="0dp"
-                  android:layout_height="56dp"
-                  android:layout_marginStart="24dp"
-                  android:layout_marginEnd="24dp"
-                  android:layout_marginTop="24dp"
-                  android:text="Start Recording"
-                  android:textSize="16sp"
-                  android:textStyle="bold"
-                  android:textColor="@android:color/white"
-                  style="@style/Widget.MaterialComponents.Button"
-                  app:cornerRadius="28dp"
-                  app:layout_constraintTop_toBottomOf="@id/cardStatus"
-                  app:layout_constraintStart_toStartOf="parent"
-                  app:layout_constraintEnd_toEndOf="parent"/>
-
-              <Button
-                  android:id="@+id/btnViewRecordings"
-                  android:layout_width="0dp"
-                  android:layout_height="48dp"
-                  android:layout_marginStart="24dp"
-                  android:layout_marginEnd="24dp"
-                  android:layout_marginTop="12dp"
-                  android:text="View Recordings"
-                  android:textSize="14sp"
-                  android:textColor="@color/purple_500"
-                  style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                  app:strokeColor="@color/purple_500"
-                  app:cornerRadius="24dp"
-                  app:layout_constraintTop_toBottomOf="@id/btnRecord"
-                  app:layout_constraintStart_toStartOf="parent"
-                  app:layout_constraintEnd_toEndOf="parent"/>
-
-              <androidx.cardview.widget.CardView
-                  android:id="@+id/cardPreview"
-                  android:layout_width="0dp"
-                  android:layout_height="wrap_content"
-                  android:layout_marginStart="24dp"
-                  android:layout_marginEnd="24dp"
-                  android:layout_marginTop="24dp"
-                  android:visibility="gone"
-                  app:cardCornerRadius="16dp"
-                  app:cardElevation="4dp"
-                  app:cardBackgroundColor="@color/card_background"
-                  app:layout_constraintTop_toBottomOf="@id/btnViewRecordings"
-                  app:layout_constraintStart_toStartOf="parent"
-                  app:layout_constraintEnd_toEndOf="parent">
-
-                  <LinearLayout
-                      android:layout_width="match_parent"
-                      android:layout_height="wrap_content"
-                      android:orientation="vertical"
-                      android:padding="20dp">
-
-                      <TextView
-                          android:layout_width="wrap_content"
-                          android:layout_height="wrap_content"
-                          android:text="Recording Saved!"
-                          android:textSize="16sp"
-                          android:textStyle="bold"
-                          android:textColor="@color/success_green"/>
-
-                      <TextView
-                          android:layout_width="wrap_content"
-                          android:layout_height="wrap_content"
-                          android:text="Saved to Movies/ScreenRecorder on your device."
-                          android:textSize="13sp"
-                          android:textColor="@color/text_secondary"
-                          android:layout_marginTop="4dp"/>
-                  </LinearLayout>
-              </androidx.cardview.widget.CardView>
-
-          </androidx.constraintlayout.widget.ConstraintLayout>
-          EOF
-
-      - name: Write colors.xml
-        run: |
-          cat > ScreenRecorder/app/src/main/res/values/colors.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <color name="purple_200">#FFBB86FC</color>
-              <color name="purple_500">#FF6200EE</color>
-              <color name="purple_700">#FF3700B3</color>
-              <color name="teal_200">#FF03DAC5</color>
-              <color name="teal_700">#FF018786</color>
-              <color name="black">#FF000000</color>
-              <color name="white">#FFFFFFFF</color>
-              <color name="background">#FFF5F5F5</color>
-              <color name="card_background">#FFFFFFFF</color>
-              <color name="text_primary">#FF212121</color>
-              <color name="text_secondary">#FF757575</color>
-              <color name="success_green">#FF4CAF50</color>
-          </resources>
-          EOF
-
-      - name: Write strings.xml
-        run: |
-          cat > ScreenRecorder/app/src/main/res/values/strings.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <string name="app_name">Screen Recorder</string>
-          </resources>
-          EOF
-
-      - name: Write themes.xml
-        run: |
-          cat > ScreenRecorder/app/src/main/res/values/themes.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <style name="Theme.ScreenRecorder" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
-                  <item name="colorPrimary">@color/purple_500</item>
-                  <item name="colorPrimaryVariant">@color/purple_700</item>
-                  <item name="colorOnPrimary">@color/white</item>
-                  <item name="colorSecondary">@color/teal_200</item>
-                  <item name="colorSecondaryVariant">@color/teal_700</item>
-                  <item name="colorOnSecondary">@color/black</item>
-                  <item name="android:statusBarColor">?attr/colorPrimaryVariant</item>
-                  <item name="android:windowBackground">@color/background</item>
-              </style>
-          </resources>
-          EOF
-
-      - name: Write drawables
-        run: |
-          cat > ScreenRecorder/app/src/main/res/drawable/circle_background.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-              <solid android:color="@color/purple_500"/>
-              <size android:width="80dp" android:height="80dp"/>
-          </shape>
-          EOF
-
-          cat > ScreenRecorder/app/src/main/res/drawable/recording_pulse.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-              <solid android:color="#44F44336"/>
-              <size android:width="96dp" android:height="96dp"/>
-          </shape>
-          EOF
-
-      - name: Generate launcher PNG icons
-        run: |
-          python3 - << 'PYEOF'
-          import struct, zlib, os
-
-          def make_png(size, fg, bg):
-              def chunk(t, d):
-                  c = t + d
-                  return struct.pack('>I', len(d)) + c + struct.pack('>I', zlib.crc32(c) & 0xFFFFFFFF)
-              rows = b''
-              cx = cy = size // 2
-              r = size * 0.38
-              for y in range(size):
-                  row = b'\x00'
-                  for x in range(size):
-                      row += bytes(fg if (x-cx)**2+(y-cy)**2 < r*r else bg)
-                  rows += row
-              ihdr = chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0))
-              idat = chunk(b'IDAT', zlib.compress(rows, 9))
-              iend = chunk(b'IEND', b'')
-              return b'\x89PNG\r\n\x1a\n' + ihdr + idat + iend
-
-          base = 'ScreenRecorder/app/src/main/res'
-          for folder, size in [('mipmap-mdpi',48),('mipmap-hdpi',72),
-                                ('mipmap-xhdpi',96),('mipmap-xxhdpi',144),('mipmap-xxxhdpi',192)]:
-              d = os.path.join(base, folder)
-              os.makedirs(d, exist_ok=True)
-              data = make_png(size, [255,255,255], [98,0,238])
-              for name in ('ic_launcher.png', 'ic_launcher_round.png'):
-                  open(os.path.join(d, name), 'wb').write(data)
-          print("Icons written")
-          PYEOF
-
-      - name: Write proguard-rules.pro
-        run: echo '-keep class com.example.screenrecorder.** { *; }' > ScreenRecorder/app/proguard-rules.pro
-
-      - name: Verify project structure
-        run: |
-          find ScreenRecorder -type f | sort
-          echo "--- local.properties ---"
-          cat ScreenRecorder/local.properties
-
       - name: Build Debug APK
-        working-directory: ScreenRecorder
-        run: |
-          export PATH="/opt/gradle/gradle-8.0/bin:$PATH"
-          export ANDROID_HOME=$ANDROID_SDK_ROOT
-          gradle assembleDebug \
-            --no-daemon \
-            --stacktrace \
-            --info \
-            -Dorg.gradle.jvmargs="-Xmx2g" \
-            2>&1
+        working-directory: ./ScreenRecorder
+        run: ./gradlew assembleDebug --no-daemon
 
-      - name: Locate APK
-        id: find_apk
-        run: |
-          APK=$(find ScreenRecorder/app/build/outputs/apk/debug -name "*.apk" | head -1)
-          echo "APK=$APK" >> $GITHUB_OUTPUT
-          echo "Found: $APK"
-          ls -lh "$APK"
-
-      - name: Sign APK
-        run: |
-          # Generate keystore
-          keytool -genkey -v \
-            -keystore debug.keystore \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
-
-          # Find apksigner
-          APKSIGNER=$(find $ANDROID_SDK_ROOT/build-tools -name "apksigner" | sort -V | tail -1)
-          echo "apksigner: $APKSIGNER"
-
-          $APKSIGNER sign \
-            --ks debug.keystore \
-            --ks-key-alias androiddebugkey \
-            --ks-pass pass:android \
-            --key-pass pass:android \
-            --out ScreenRecorder-signed.apk \
-            "${{ steps.find_apk.outputs.APK }}"
-
-          ls -lh ScreenRecorder-signed.apk
-          $APKSIGNER verify --verbose ScreenRecorder-signed.apk
-
-      - name: Upload signed APK
+      - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ScreenRecorder-APK
-          path: ScreenRecorder-signed.apk
-          retention-days: 30
-
-      - name: Upload debug APK (fallback)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ScreenRecorder-Debug-APK
-          path: ScreenRecorder/app/build/outputs/apk/debug/*.apk
-          retention-days: 30
+          name: screen-recorder-apk
+          path: ScreenRecorder/app/build/outputs/apk/debug/app-debug.apk
