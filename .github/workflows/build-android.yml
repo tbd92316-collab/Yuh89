@@ -18,44 +18,41 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK manually
+      - name: Setup Android SDK
         run: |
-          # The preinstalled SDK on ubuntu-latest is sufficient; just point vars at it
           export ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT"     >> $GITHUB_ENV
-
-          # Accept all licenses non-interactively
           yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
-
-          # Install / update required SDK components
           $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
             "platform-tools" \
             "platforms;android-33" \
-            "build-tools;33.0.2" > /dev/null 2>&1
-
-          echo "$ANDROID_SDK_ROOT/platform-tools"    >> $GITHUB_PATH
+            "build-tools;33.0.2" 2>&1
+          echo "$ANDROID_SDK_ROOT/platform-tools"     >> $GITHUB_PATH
           echo "$ANDROID_SDK_ROOT/build-tools/33.0.2" >> $GITHUB_PATH
 
-      - name: Create project structure
+      - name: Install Gradle 8.0
         run: |
-          mkdir -p ScreenRecorder
-          cd ScreenRecorder
-          mkdir -p app/src/main/java/com/example/screenrecorder
-          mkdir -p app/src/main/res/layout
-          mkdir -p app/src/main/res/values
-          mkdir -p app/src/main/res/drawable
-          mkdir -p app/src/main/res/mipmap-hdpi
-          mkdir -p app/src/main/res/mipmap-mdpi
-          mkdir -p app/src/main/res/mipmap-xhdpi
-          mkdir -p app/src/main/res/mipmap-xxhdpi
-          mkdir -p app/src/main/res/mipmap-xxxhdpi
-          mkdir -p app/src/main/res/xml
-          mkdir -p gradle/wrapper
+          wget -q https://services.gradle.org/distributions/gradle-8.0-bin.zip -O /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /opt/gradle
+          echo "/opt/gradle/gradle-8.0/bin" >> $GITHUB_PATH
+
+      - name: Create project directory structure
+        run: |
+          mkdir -p ScreenRecorder/app/src/main/java/com/example/screenrecorder
+          mkdir -p ScreenRecorder/app/src/main/res/layout
+          mkdir -p ScreenRecorder/app/src/main/res/values
+          mkdir -p ScreenRecorder/app/src/main/res/drawable
+          mkdir -p ScreenRecorder/app/src/main/res/mipmap-mdpi
+          mkdir -p ScreenRecorder/app/src/main/res/mipmap-hdpi
+          mkdir -p ScreenRecorder/app/src/main/res/mipmap-xhdpi
+          mkdir -p ScreenRecorder/app/src/main/res/mipmap-xxhdpi
+          mkdir -p ScreenRecorder/app/src/main/res/mipmap-xxxhdpi
+          mkdir -p ScreenRecorder/gradle/wrapper
 
       - name: Write settings.gradle
         run: |
-          cat > ScreenRecorder/settings.gradle << 'GRADLE_EOF'
+          cat > ScreenRecorder/settings.gradle << 'EOF'
           pluginManagement {
               repositories {
                   google()
@@ -72,31 +69,27 @@ jobs:
           }
           rootProject.name = "ScreenRecorder"
           include ':app'
-          GRADLE_EOF
+          EOF
 
       - name: Write root build.gradle
         run: |
-          cat > ScreenRecorder/build.gradle << 'GRADLE_EOF'
+          cat > ScreenRecorder/build.gradle << 'EOF'
           buildscript {
-              ext.kotlin_version = '1.8.0'
+              ext.kotlin_version = '1.8.22'
               repositories {
                   google()
                   mavenCentral()
               }
               dependencies {
-                  classpath 'com.android.tools.build:gradle:7.4.2'
+                  classpath 'com.android.tools.build:gradle:8.0.2'
                   classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
               }
           }
+          EOF
 
-          task clean(type: Delete) {
-              delete rootProject.buildDir
-          }
-          GRADLE_EOF
-
-      - name: Write app build.gradle
+      - name: Write app/build.gradle
         run: |
-          cat > ScreenRecorder/app/build.gradle << 'GRADLE_EOF'
+          cat > ScreenRecorder/app/build.gradle << 'EOF'
           plugins {
               id 'com.android.application'
               id 'org.jetbrains.kotlin.android'
@@ -115,13 +108,12 @@ jobs:
               }
 
               buildTypes {
+                  debug {
+                      debuggable true
+                  }
                   release {
                       minifyEnabled false
                       proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-                      signingConfig signingConfigs.getByName("debug")
-                  }
-                  debug {
-                      debuggable true
                   }
               }
 
@@ -147,38 +139,19 @@ jobs:
               implementation 'androidx.activity:activity-ktx:1.6.1'
               implementation 'androidx.lifecycle:lifecycle-service:2.5.1'
           }
-          GRADLE_EOF
+          EOF
 
-      - name: Write gradle wrapper properties
+      - name: Write gradle-wrapper.properties
         run: |
           cat > ScreenRecorder/gradle/wrapper/gradle-wrapper.properties << 'EOF'
           distributionBase=GRADLE_USER_HOME
           distributionPath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-7.5-bin.zip
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.0-bin.zip
           zipStoreBase=GRADLE_USER_HOME
           zipStorePath=wrapper/dists
           EOF
 
-      - name: Download gradle wrapper jar
-        run: |
-          mkdir -p ScreenRecorder/gradle/wrapper
-          curl -L "https://github.com/gradle/gradle/raw/v7.5.0/gradle/wrapper/gradle-wrapper.jar" \
-            -o ScreenRecorder/gradle/wrapper/gradle-wrapper.jar || \
-          curl -L "https://raw.githubusercontent.com/gradle/gradle/v7.5.0/gradle/wrapper/gradle-wrapper.jar" \
-            -o ScreenRecorder/gradle/wrapper/gradle-wrapper.jar || \
-          wget -q "https://services.gradle.org/distributions/gradle-7.5-bin.zip" -O /tmp/gradle-7.5-bin.zip && \
-          cd /tmp && unzip -q gradle-7.5-bin.zip && \
-          cp gradle-7.5/lib/plugins/gradle-wrapper-*.jar ScreenRecorder/gradle/wrapper/gradle-wrapper.jar || true
-
-      - name: Install Gradle manually
-        run: |
-          wget -q https://services.gradle.org/distributions/gradle-7.5-bin.zip -O /tmp/gradle.zip
-          unzip -q /tmp/gradle.zip -d /opt/gradle
-          echo "/opt/gradle/gradle-7.5/bin" >> $GITHUB_PATH
-          export PATH="/opt/gradle/gradle-7.5/bin:$PATH"
-          gradle --version
-
-      - name: Write gradlew script
+      - name: Write gradlew (delegates to system Gradle)
         run: |
           cat > ScreenRecorder/gradlew << 'EOF'
           #!/bin/sh
@@ -186,9 +159,13 @@ jobs:
           EOF
           chmod +x ScreenRecorder/gradlew
 
+      - name: Write local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > ScreenRecorder/local.properties
+
       - name: Write AndroidManifest.xml
         run: |
-          cat > ScreenRecorder/app/src/main/AndroidManifest.xml << 'XML_EOF'
+          cat > ScreenRecorder/app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -199,7 +176,7 @@ jobs:
                   android:maxSdkVersion="32"/>
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
               <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
-              <uses-permission android:name="android.permission.NOTIFICATION_POST_NOTIFICATIONS"/>
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
               <application
                   android:allowBackup="true"
@@ -228,11 +205,11 @@ jobs:
 
               </application>
           </manifest>
-          XML_EOF
+          EOF
 
       - name: Write MainActivity.kt
         run: |
-          cat > ScreenRecorder/app/src/main/java/com/example/screenrecorder/MainActivity.kt << 'KT_EOF'
+          cat > ScreenRecorder/app/src/main/java/com/example/screenrecorder/MainActivity.kt << 'EOF'
           package com.example.screenrecorder
 
           import android.Manifest
@@ -279,11 +256,7 @@ jobs:
                   ActivityResultContracts.RequestMultiplePermissions()
               ) { permissions ->
                   val allGranted = permissions.entries.all { it.value }
-                  if (allGranted) {
-                      startScreenCapture()
-                  } else {
-                      showPermissionRationale()
-                  }
+                  if (allGranted) startScreenCapture() else showPermissionRationale()
               }
 
               private val mediaProjectionLauncher = registerForActivityResult(
@@ -301,54 +274,32 @@ jobs:
                   super.onCreate(savedInstanceState)
                   binding = ActivityMainBinding.inflate(layoutInflater)
                   setContentView(binding.root)
-
                   setupUI()
-                  bindRecordingService()
               }
 
               private fun setupUI() {
                   binding.btnRecord.setOnClickListener {
-                      if (!isRecording) {
-                          checkPermissionsAndStart()
-                      } else {
-                          stopRecording()
-                      }
+                      if (!isRecording) checkPermissionsAndStart() else stopRecording()
                   }
-
-                  binding.btnViewRecordings.setOnClickListener {
-                      openGallery()
-                  }
-
+                  binding.btnViewRecordings.setOnClickListener { openGallery() }
                   updateUI(false)
               }
 
               private fun checkPermissionsAndStart() {
-                  val permissionsToRequest = mutableListOf<String>()
-
+                  val needed = mutableListOf<String>()
                   if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-                      != PackageManager.PERMISSION_GRANTED) {
-                      permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
-                  }
-
-                  if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
-                      if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                          != PackageManager.PERMISSION_GRANTED) {
-                          permissionsToRequest.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                      }
-                  }
-
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                      if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                          != PackageManager.PERMISSION_GRANTED) {
-                          permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
-                      }
-                  }
-
-                  if (permissionsToRequest.isNotEmpty()) {
-                      permissionLauncher.launch(permissionsToRequest.toTypedArray())
-                  } else {
-                      startScreenCapture()
-                  }
+                      != PackageManager.PERMISSION_GRANTED)
+                      needed.add(Manifest.permission.RECORD_AUDIO)
+                  if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
+                      ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                      != PackageManager.PERMISSION_GRANTED)
+                      needed.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                      ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                      != PackageManager.PERMISSION_GRANTED)
+                      needed.add(Manifest.permission.POST_NOTIFICATIONS)
+                  if (needed.isNotEmpty()) permissionLauncher.launch(needed.toTypedArray())
+                  else startScreenCapture()
               }
 
               private fun startScreenCapture() {
@@ -362,27 +313,21 @@ jobs:
                       putExtra(RecordingService.EXTRA_RESULT_CODE, resultCode)
                       putExtra(RecordingService.EXTRA_DATA, data)
                   }
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                      startForegroundService(intent)
-                  } else {
-                      startService(intent)
-                  }
-                  bindRecordingService()
-                  isRecording = true
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
+                  else startService(intent)
+                  val bindIntent = Intent(this, RecordingService::class.java)
+                  bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE)
                   updateUI(true)
                   Toast.makeText(this, "Recording started", Toast.LENGTH_SHORT).show()
               }
 
               private fun stopRecording() {
-                  val intent = Intent(this, RecordingService::class.java).apply {
+                  startService(Intent(this, RecordingService::class.java).apply {
                       action = RecordingService.ACTION_STOP
-                  }
-                  startService(intent)
-                  isRecording = false
+                  })
                   updateUI(false)
-                  Toast.makeText(this, "Recording saved to gallery", Toast.LENGTH_LONG).show()
-
                   binding.cardPreview.visibility = View.VISIBLE
+                  Toast.makeText(this, "Recording saved to gallery", Toast.LENGTH_LONG).show()
               }
 
               private fun updateUI(recording: Boolean) {
@@ -406,49 +351,38 @@ jobs:
               private fun showPermissionRationale() {
                   AlertDialog.Builder(this)
                       .setTitle("Permissions Required")
-                      .setMessage("This app needs Microphone and Storage permissions to record your screen with audio. Please grant these permissions in Settings.")
+                      .setMessage("Microphone and Storage permissions are needed to record your screen. Please grant them in Settings.")
                       .setPositiveButton("Open Settings") { _, _ ->
-                          val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                              Uri.fromParts("package", packageName, null))
-                          startActivity(intent)
+                          startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                              Uri.fromParts("package", packageName, null)))
                       }
                       .setNegativeButton("Cancel", null)
                       .show()
               }
 
               private fun openGallery() {
-                  val intent = Intent(Intent.ACTION_VIEW).apply {
-                      type = "video/*"
-                      flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                  }
                   try {
-                      startActivity(intent)
+                      startActivity(Intent(Intent.ACTION_VIEW).apply {
+                          type = "video/*"
+                          flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                      })
                   } catch (e: Exception) {
                       Toast.makeText(this, "No video player found", Toast.LENGTH_SHORT).show()
                   }
               }
 
-              private fun bindRecordingService() {
-                  val intent = Intent(this, RecordingService::class.java)
-                  bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
-              }
-
               override fun onDestroy() {
                   super.onDestroy()
-                  if (isBound) {
-                      unbindService(serviceConnection)
-                      isBound = false
-                  }
+                  if (isBound) { unbindService(serviceConnection); isBound = false }
               }
           }
-          KT_EOF
+          EOF
 
       - name: Write RecordingService.kt
         run: |
-          cat > ScreenRecorder/app/src/main/java/com/example/screenrecorder/RecordingService.kt << 'KT_EOF'
+          cat > ScreenRecorder/app/src/main/java/com/example/screenrecorder/RecordingService.kt << 'EOF'
           package com.example.screenrecorder
 
-          import android.app.Notification
           import android.app.NotificationChannel
           import android.app.NotificationManager
           import android.app.PendingIntent
@@ -479,27 +413,27 @@ jobs:
 
               companion object {
                   const val ACTION_START = "ACTION_START"
-                  const val ACTION_STOP = "ACTION_STOP"
+                  const val ACTION_STOP  = "ACTION_STOP"
                   const val EXTRA_RESULT_CODE = "EXTRA_RESULT_CODE"
-                  const val EXTRA_DATA = "EXTRA_DATA"
-                  private const val CHANNEL_ID = "RecordingChannel"
-                  private const val NOTIFICATION_ID = 1001
-                  private const val TAG = "RecordingService"
+                  const val EXTRA_DATA        = "EXTRA_DATA"
+                  private const val CHANNEL_ID       = "RecordingChannel"
+                  private const val NOTIFICATION_ID  = 1001
+                  private const val TAG              = "RecordingService"
               }
-
-              private val binder = LocalBinder()
-              private var mediaProjection: MediaProjection? = null
-              private var mediaRecorder: MediaRecorder? = null
-              private var virtualDisplay: VirtualDisplay? = null
-              private var outputFilePath: String = ""
-              private var screenWidth = 0
-              private var screenHeight = 0
-              private var screenDensity = 0
-              private var isRecording = false
 
               inner class LocalBinder : Binder() {
                   fun getService(): RecordingService = this@RecordingService
               }
+
+              private val binder = LocalBinder()
+              private var mediaProjection: MediaProjection? = null
+              private var mediaRecorder: MediaRecorder?     = null
+              private var virtualDisplay: VirtualDisplay?   = null
+              private var outputFilePath = ""
+              private var screenWidth    = 1080
+              private var screenHeight   = 1920
+              private var screenDensity  = 320
+              private var isRecording    = false
 
               override fun onBind(intent: Intent): IBinder = binder
 
@@ -510,43 +444,42 @@ jobs:
               }
 
               private fun initScreenMetrics() {
-                  val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-                  val metrics = DisplayMetrics()
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                      val bounds = wm.currentWindowMetrics.bounds
-                      screenWidth = bounds.width()
-                      screenHeight = bounds.height()
-                      screenDensity = resources.displayMetrics.densityDpi
-                  } else {
-                      @Suppress("DEPRECATION")
-                      wm.defaultDisplay.getMetrics(metrics)
-                      screenWidth = metrics.widthPixels
-                      screenHeight = metrics.heightPixels
-                      screenDensity = metrics.densityDpi
+                  try {
+                      val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                          val bounds = wm.currentWindowMetrics.bounds
+                          screenWidth   = bounds.width()
+                          screenHeight  = bounds.height()
+                          screenDensity = resources.displayMetrics.densityDpi
+                      } else {
+                          val m = DisplayMetrics()
+                          @Suppress("DEPRECATION")
+                          wm.defaultDisplay.getMetrics(m)
+                          screenWidth   = m.widthPixels
+                          screenHeight  = m.heightPixels
+                          screenDensity = m.densityDpi
+                      }
+                      if (screenWidth > 1080) {
+                          val scale = 1080f / screenWidth
+                          screenWidth  = 1080
+                          screenHeight = (screenHeight * scale).toInt()
+                      }
+                      screenWidth  = if (screenWidth  % 2 == 0) screenWidth  else screenWidth  - 1
+                      screenHeight = if (screenHeight % 2 == 0) screenHeight else screenHeight - 1
+                  } catch (e: Exception) {
+                      Log.e(TAG, "initScreenMetrics failed, using defaults", e)
                   }
-                  if (screenWidth > 1080) {
-                      val scale = 1080f / screenWidth
-                      screenWidth = 1080
-                      screenHeight = (screenHeight * scale).toInt()
-                  }
-                  screenWidth = if (screenWidth % 2 == 0) screenWidth else screenWidth - 1
-                  screenHeight = if (screenHeight % 2 == 0) screenHeight else screenHeight - 1
               }
 
               override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
                   when (intent?.action) {
                       ACTION_START -> {
-                          val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, -1)
-                          val data = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                          val code = intent.getIntExtra(EXTRA_RESULT_CODE, -1)
+                          val data: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
                               intent.getParcelableExtra(EXTRA_DATA, Intent::class.java)
-                          } else {
-                              @Suppress("DEPRECATION")
-                              intent.getParcelableExtra(EXTRA_DATA)
-                          }
-                          if (data != null) {
-                              startForegroundWithNotification()
-                              startRecording(resultCode, data)
-                          }
+                          else
+                              @Suppress("DEPRECATION") intent.getParcelableExtra(EXTRA_DATA)
+                          if (data != null) { startForegroundNotification(); startRecording(code, data) }
                       }
                       ACTION_STOP -> {
                           stopRecording()
@@ -557,73 +490,51 @@ jobs:
                   return START_NOT_STICKY
               }
 
-              private fun startForegroundWithNotification() {
-                  val stopIntent = Intent(this, RecordingService::class.java).apply {
-                      action = ACTION_STOP
-                  }
-                  val stopPendingIntent = PendingIntent.getService(
-                      this, 0, stopIntent,
-                      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                  )
-
-                  val mainIntent = Intent(this, MainActivity::class.java)
-                  val mainPendingIntent = PendingIntent.getActivity(
-                      this, 0, mainIntent,
-                      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                  )
-
-                  val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+              private fun startForegroundNotification() {
+                  val stopPi = PendingIntent.getService(this, 0,
+                      Intent(this, RecordingService::class.java).apply { action = ACTION_STOP },
+                      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                  val openPi = PendingIntent.getActivity(this, 0,
+                      Intent(this, MainActivity::class.java),
+                      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                  val n = NotificationCompat.Builder(this, CHANNEL_ID)
                       .setContentTitle("Screen Recording")
-                      .setContentText("Recording in progress...")
+                      .setContentText("Recording in progress…")
                       .setSmallIcon(android.R.drawable.ic_media_play)
-                      .setContentIntent(mainPendingIntent)
-                      .addAction(android.R.drawable.ic_media_pause, "Stop", stopPendingIntent)
+                      .setContentIntent(openPi)
+                      .addAction(android.R.drawable.ic_media_pause, "Stop", stopPi)
                       .setOngoing(true)
                       .setPriority(NotificationCompat.PRIORITY_LOW)
                       .build()
-
-                  startForeground(NOTIFICATION_ID, notification)
+                  startForeground(NOTIFICATION_ID, n)
               }
 
               private fun startRecording(resultCode: Int, data: Intent) {
                   try {
-                      outputFilePath = createOutputFilePath()
+                      outputFilePath = buildOutputPath()
                       setupMediaRecorder()
-
                       val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
                       mediaProjection = mpm.getMediaProjection(resultCode, data)
-
                       mediaProjection?.registerCallback(object : MediaProjection.Callback() {
-                          override fun onStop() {
-                              stopRecording()
-                          }
+                          override fun onStop() { stopRecording() }
                       }, null)
-
                       virtualDisplay = mediaProjection?.createVirtualDisplay(
-                          "ScreenRecorder",
-                          screenWidth, screenHeight, screenDensity,
+                          "ScreenRecorder", screenWidth, screenHeight, screenDensity,
                           DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                          mediaRecorder?.surface, null, null
-                      )
-
+                          mediaRecorder?.surface, null, null)
                       mediaRecorder?.start()
                       isRecording = true
-                      Log.d(TAG, "Recording started: $outputFilePath")
+                      Log.d(TAG, "Recording started → $outputFilePath")
                   } catch (e: Exception) {
-                      Log.e(TAG, "Failed to start recording", e)
+                      Log.e(TAG, "startRecording failed", e)
                       stopSelf()
                   }
               }
 
               private fun setupMediaRecorder() {
-                  mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                      MediaRecorder(this)
-                  } else {
-                      @Suppress("DEPRECATION")
-                      MediaRecorder()
-                  }
-
-                  mediaRecorder?.apply {
+                  mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                      MediaRecorder(this) else @Suppress("DEPRECATION") MediaRecorder()
+                  mediaRecorder!!.apply {
                       setAudioSource(MediaRecorder.AudioSource.MIC)
                       setVideoSource(MediaRecorder.VideoSource.SURFACE)
                       setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
@@ -631,27 +542,24 @@ jobs:
                       setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                       setVideoSize(screenWidth, screenHeight)
                       setVideoFrameRate(30)
-                      setVideoEncodingBitRate(5 * 1024 * 1024)
+                      setVideoEncodingBitRate(5_000_000)
                       setAudioSamplingRate(44100)
-                      setAudioEncodingBitRate(128000)
+                      setAudioEncodingBitRate(128_000)
                       setOutputFile(outputFilePath)
                       prepare()
                   }
               }
 
-              private fun createOutputFilePath(): String {
-                  val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                  val fileName = "ScreenRecording_$timestamp.mp4"
+              private fun buildOutputPath(): String {
+                  val ts   = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                  val name = "ScreenRec_$ts.mp4"
                   return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                      val dir = getExternalFilesDir(Environment.DIRECTORY_MOVIES)
-                      File(dir, fileName).absolutePath
+                      File(getExternalFilesDir(Environment.DIRECTORY_MOVIES), name).absolutePath
                   } else {
-                      val dir = File(
-                          Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
-                          "ScreenRecorder"
-                      )
+                      val dir = File(Environment.getExternalStoragePublicDirectory(
+                          Environment.DIRECTORY_MOVIES), "ScreenRecorder")
                       dir.mkdirs()
-                      File(dir, fileName).absolutePath
+                      File(dir, name).absolutePath
                   }
               }
 
@@ -659,83 +567,60 @@ jobs:
                   if (!isRecording) return
                   isRecording = false
                   try {
-                      mediaRecorder?.apply {
-                          stop()
-                          reset()
-                          release()
-                      }
+                      mediaRecorder?.stop(); mediaRecorder?.reset(); mediaRecorder?.release()
                       mediaRecorder = null
-
-                      virtualDisplay?.release()
-                      virtualDisplay = null
-
-                      mediaProjection?.stop()
-                      mediaProjection = null
-
+                      virtualDisplay?.release(); virtualDisplay = null
+                      mediaProjection?.stop();  mediaProjection = null
                       saveToGallery()
-                      Log.d(TAG, "Recording stopped and saved")
-                  } catch (e: Exception) {
-                      Log.e(TAG, "Error stopping recording", e)
-                  }
+                  } catch (e: Exception) { Log.e(TAG, "stopRecording error", e) }
               }
 
               private fun saveToGallery() {
                   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                      val values = ContentValues().apply {
-                          put(MediaStore.Video.Media.DISPLAY_NAME,
-                              File(outputFilePath).name)
+                      val cv = ContentValues().apply {
+                          put(MediaStore.Video.Media.DISPLAY_NAME, File(outputFilePath).name)
                           put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
                           put(MediaStore.Video.Media.RELATIVE_PATH,
                               Environment.DIRECTORY_MOVIES + "/ScreenRecorder")
                           put(MediaStore.Video.Media.IS_PENDING, 1)
                       }
-                      val uri = contentResolver.insert(
-                          MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+                      val uri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cv)
                       uri?.let {
                           contentResolver.openOutputStream(it)?.use { out ->
-                              File(outputFilePath).inputStream().use { inp -> inp.copyTo(out) }
+                              File(outputFilePath).inputStream().copyTo(out)
                           }
-                          values.clear()
-                          values.put(MediaStore.Video.Media.IS_PENDING, 0)
-                          contentResolver.update(it, values, null, null)
+                          cv.clear(); cv.put(MediaStore.Video.Media.IS_PENDING, 0)
+                          contentResolver.update(it, cv, null, null)
                       }
                   }
               }
 
               private fun createNotificationChannel() {
                   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                      val channel = NotificationChannel(
-                          CHANNEL_ID,
-                          "Screen Recording",
-                          NotificationManager.IMPORTANCE_LOW
-                      ).apply {
+                      val ch = NotificationChannel(CHANNEL_ID, "Screen Recording",
+                          NotificationManager.IMPORTANCE_LOW).apply {
                           description = "Screen recording notification"
                           setSound(null, null)
                       }
-                      val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                      nm.createNotificationChannel(channel)
+                      (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                          .createNotificationChannel(ch)
                   }
               }
 
-              override fun onDestroy() {
-                  stopRecording()
-                  super.onDestroy()
-              }
+              override fun onDestroy() { stopRecording(); super.onDestroy() }
           }
-          KT_EOF
+          EOF
 
-      - name: Write activity_main.xml layout
+      - name: Write activity_main.xml
         run: |
-          cat > ScreenRecorder/app/src/main/res/layout/activity_main.xml << 'XML_EOF'
+          cat > ScreenRecorder/app/src/main/res/layout/activity_main.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <androidx.constraintlayout.widget.ConstraintLayout
               xmlns:android="http://schemas.android.com/apk/res/android"
               xmlns:app="http://schemas.android.com/apk/res-auto"
-              xmlns:tools="http://schemas.android.com/tools"
               android:layout_width="match_parent"
               android:layout_height="match_parent"
-              android:background="@color/background"
-              tools:context=".MainActivity">
+              android:background="@color/background">
 
               <LinearLayout
                   android:id="@+id/headerLayout"
@@ -752,11 +637,10 @@ jobs:
                   <TextView
                       android:layout_width="wrap_content"
                       android:layout_height="wrap_content"
-                      android:text="Screen Recorder"
+                      android:text="@string/app_name"
                       android:textSize="28sp"
                       android:textStyle="bold"
-                      android:textColor="@color/text_primary"
-                      android:letterSpacing="0.02"/>
+                      android:textColor="@color/text_primary"/>
 
                   <TextView
                       android:layout_width="wrap_content"
@@ -765,15 +649,15 @@ jobs:
                       android:textSize="14sp"
                       android:textColor="@color/text_secondary"
                       android:layout_marginTop="4dp"/>
-
               </LinearLayout>
 
               <androidx.cardview.widget.CardView
                   android:id="@+id/cardStatus"
-                  android:layout_width="match_parent"
+                  android:layout_width="0dp"
                   android:layout_height="wrap_content"
                   android:layout_marginStart="24dp"
                   android:layout_marginEnd="24dp"
+                  android:layout_marginTop="16dp"
                   app:cardCornerRadius="16dp"
                   app:cardElevation="4dp"
                   app:cardBackgroundColor="@color/card_background"
@@ -812,7 +696,6 @@ jobs:
                               android:layout_gravity="center"
                               android:src="@android:drawable/ic_btn_speak_now"
                               android:tint="@android:color/white"/>
-
                       </FrameLayout>
 
                       <TextView
@@ -823,7 +706,6 @@ jobs:
                           android:textSize="16sp"
                           android:textColor="@color/text_primary"
                           android:layout_marginTop="16dp"/>
-
                   </LinearLayout>
               </androidx.cardview.widget.CardView>
 
@@ -838,7 +720,6 @@ jobs:
                   android:textSize="16sp"
                   android:textStyle="bold"
                   android:textColor="@android:color/white"
-                  android:backgroundTint="@color/purple_500"
                   style="@style/Widget.MaterialComponents.Button"
                   app:cornerRadius="28dp"
                   app:layout_constraintTop_toBottomOf="@id/cardStatus"
@@ -864,7 +745,7 @@ jobs:
 
               <androidx.cardview.widget.CardView
                   android:id="@+id/cardPreview"
-                  android:layout_width="match_parent"
+                  android:layout_width="0dp"
                   android:layout_height="wrap_content"
                   android:layout_marginStart="24dp"
                   android:layout_marginEnd="24dp"
@@ -894,20 +775,19 @@ jobs:
                       <TextView
                           android:layout_width="wrap_content"
                           android:layout_height="wrap_content"
-                          android:text="Your recording has been saved to the Movies/ScreenRecorder folder."
+                          android:text="Saved to Movies/ScreenRecorder on your device."
                           android:textSize="13sp"
                           android:textColor="@color/text_secondary"
                           android:layout_marginTop="4dp"/>
-
                   </LinearLayout>
               </androidx.cardview.widget.CardView>
 
           </androidx.constraintlayout.widget.ConstraintLayout>
-          XML_EOF
+          EOF
 
       - name: Write colors.xml
         run: |
-          cat > ScreenRecorder/app/src/main/res/values/colors.xml << 'XML_EOF'
+          cat > ScreenRecorder/app/src/main/res/values/colors.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
               <color name="purple_200">#FFBB86FC</color>
@@ -922,27 +802,21 @@ jobs:
               <color name="text_primary">#FF212121</color>
               <color name="text_secondary">#FF757575</color>
               <color name="success_green">#FF4CAF50</color>
-              <color name="recording_red">#FFF44336</color>
           </resources>
-          XML_EOF
+          EOF
 
       - name: Write strings.xml
         run: |
-          cat > ScreenRecorder/app/src/main/res/values/strings.xml << 'XML_EOF'
+          cat > ScreenRecorder/app/src/main/res/values/strings.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
               <string name="app_name">Screen Recorder</string>
-              <string name="start_recording">Start Recording</string>
-              <string name="stop_recording">Stop Recording</string>
-              <string name="recording_in_progress">Recording in progress...</string>
-              <string name="ready_to_record">Ready to record</string>
-              <string name="permission_required">Permissions Required</string>
           </resources>
-          XML_EOF
+          EOF
 
       - name: Write themes.xml
         run: |
-          cat > ScreenRecorder/app/src/main/res/values/themes.xml << 'XML_EOF'
+          cat > ScreenRecorder/app/src/main/res/values/themes.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
               <style name="Theme.ScreenRecorder" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
@@ -956,180 +830,122 @@ jobs:
                   <item name="android:windowBackground">@color/background</item>
               </style>
           </resources>
-          XML_EOF
+          EOF
 
-      - name: Write drawable resources
+      - name: Write drawables
         run: |
-          cat > ScreenRecorder/app/src/main/res/drawable/circle_background.xml << 'XML_EOF'
+          cat > ScreenRecorder/app/src/main/res/drawable/circle_background.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"
-              android:shape="oval">
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
               <solid android:color="@color/purple_500"/>
               <size android:width="80dp" android:height="80dp"/>
           </shape>
-          XML_EOF
+          EOF
 
-          cat > ScreenRecorder/app/src/main/res/drawable/recording_pulse.xml << 'XML_EOF'
+          cat > ScreenRecorder/app/src/main/res/drawable/recording_pulse.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"
-              android:shape="oval">
-              <solid android:color="#33F44336"/>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+              <solid android:color="#44F44336"/>
               <size android:width="96dp" android:height="96dp"/>
           </shape>
-          XML_EOF
+          EOF
 
-          cat > ScreenRecorder/app/src/main/res/drawable/ic_launcher_background.xml << 'XML_EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="108dp"
-              android:height="108dp"
-              android:viewportWidth="108"
-              android:viewportHeight="108">
-            <path
-                android:fillColor="#6200EE"
-                android:pathData="M0,0h108v108h-108z"/>
-          </vector>
-          XML_EOF
-
-          cat > ScreenRecorder/app/src/main/res/drawable/ic_launcher_foreground.xml << 'XML_EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="108dp"
-              android:height="108dp"
-              android:viewportWidth="108"
-              android:viewportHeight="108"
-              android:tint="#FFFFFF">
-            <path
-                android:fillColor="@android:color/white"
-                android:pathData="M54,54m-28,0a28,28 0,1 1,56 0a28,28 0,1 1,-56 0"/>
-            <path
-                android:fillColor="#6200EE"
-                android:pathData="M46,44l20,10l-20,10z"/>
-          </vector>
-          XML_EOF
-
-      - name: Write mipmap launcher icons
+      - name: Generate launcher PNG icons
         run: |
-          python3 << 'PYEOF'
+          python3 - << 'PYEOF'
           import struct, zlib, os
 
-          def create_png(width, height, color_rgb):
-              def png_chunk(chunk_type, data):
-                  c = chunk_type + data
-                  return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
-
-              signature = b'\x89PNG\r\n\x1a\n'
-              ihdr_data = struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)
-              ihdr = png_chunk(b'IHDR', ihdr_data)
-
-              raw_rows = []
-              for y in range(height):
+          def make_png(size, fg, bg):
+              def chunk(t, d):
+                  c = t + d
+                  return struct.pack('>I', len(d)) + c + struct.pack('>I', zlib.crc32(c) & 0xFFFFFFFF)
+              rows = b''
+              cx = cy = size // 2
+              r = size * 0.38
+              for y in range(size):
                   row = b'\x00'
-                  for x in range(width):
-                      cx, cy = width // 2, height // 2
-                      dist = ((x - cx)**2 + (y - cy)**2) ** 0.5
-                      if dist < min(width, height) * 0.35:
-                          row += bytes(color_rgb)
-                      else:
-                          row += bytes([98, 0, 238])
-                  raw_rows.append(row)
-
-              compressed = zlib.compress(b''.join(raw_rows), 9)
-              idat = png_chunk(b'IDAT', compressed)
-              iend = png_chunk(b'IEND', b'')
-              return signature + ihdr + idat + iend
-
-          sizes = {
-              'mipmap-mdpi': 48,
-              'mipmap-hdpi': 72,
-              'mipmap-xhdpi': 96,
-              'mipmap-xxhdpi': 144,
-              'mipmap-xxxhdpi': 192,
-          }
+                  for x in range(size):
+                      row += bytes(fg if (x-cx)**2+(y-cy)**2 < r*r else bg)
+                  rows += row
+              ihdr = chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0))
+              idat = chunk(b'IDAT', zlib.compress(rows, 9))
+              iend = chunk(b'IEND', b'')
+              return b'\x89PNG\r\n\x1a\n' + ihdr + idat + iend
 
           base = 'ScreenRecorder/app/src/main/res'
-          for folder, size in sizes.items():
-              path = os.path.join(base, folder)
-              os.makedirs(path, exist_ok=True)
-              png_data = create_png(size, size, [255, 255, 255])
-              with open(os.path.join(path, 'ic_launcher.png'), 'wb') as f:
-                  f.write(png_data)
-              with open(os.path.join(path, 'ic_launcher_round.png'), 'wb') as f:
-                  f.write(png_data)
-
-          print("Launcher icons created successfully")
+          for folder, size in [('mipmap-mdpi',48),('mipmap-hdpi',72),
+                                ('mipmap-xhdpi',96),('mipmap-xxhdpi',144),('mipmap-xxxhdpi',192)]:
+              d = os.path.join(base, folder)
+              os.makedirs(d, exist_ok=True)
+              data = make_png(size, [255,255,255], [98,0,238])
+              for name in ('ic_launcher.png', 'ic_launcher_round.png'):
+                  open(os.path.join(d, name), 'wb').write(data)
+          print("Icons written")
           PYEOF
 
       - name: Write proguard-rules.pro
-        run: |
-          cat > ScreenRecorder/app/proguard-rules.pro << 'EOF'
-          # Add project specific ProGuard rules here.
-          -keep class com.example.screenrecorder.** { *; }
-          EOF
-
-      - name: Write local.properties
-        run: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > ScreenRecorder/local.properties
+        run: echo '-keep class com.example.screenrecorder.** { *; }' > ScreenRecorder/app/proguard-rules.pro
 
       - name: Verify project structure
         run: |
           find ScreenRecorder -type f | sort
-          echo "---"
+          echo "--- local.properties ---"
           cat ScreenRecorder/local.properties
 
       - name: Build Debug APK
         working-directory: ScreenRecorder
         run: |
-          export PATH="/opt/gradle/gradle-7.5/bin:$PATH"
+          export PATH="/opt/gradle/gradle-8.0/bin:$PATH"
           export ANDROID_HOME=$ANDROID_SDK_ROOT
-          gradle assembleDebug --no-daemon --stacktrace 2>&1
+          gradle assembleDebug \
+            --no-daemon \
+            --stacktrace \
+            --info \
+            -Dorg.gradle.jvmargs="-Xmx2g" \
+            2>&1
 
-      - name: List build outputs
+      - name: Locate APK
+        id: find_apk
         run: |
-          find ScreenRecorder -name "*.apk" -type f 2>/dev/null
-          ls -lh ScreenRecorder/app/build/outputs/apk/debug/ 2>/dev/null || true
+          APK=$(find ScreenRecorder/app/build/outputs/apk/debug -name "*.apk" | head -1)
+          echo "APK=$APK" >> $GITHUB_OUTPUT
+          echo "Found: $APK"
+          ls -lh "$APK"
 
-      - name: Generate debug keystore
+      - name: Sign APK
         run: |
+          # Generate keystore
           keytool -genkey -v \
-            -keystore ScreenRecorder/debug.keystore \
+            -keystore debug.keystore \
             -storepass android \
             -alias androiddebugkey \
             -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null || true
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
 
-      - name: Sign APK with apksigner
-        run: |
-          APK=$(find ScreenRecorder/app/build/outputs/apk/debug -name "*.apk" | head -1)
-          echo "Found APK: $APK"
-
+          # Find apksigner
           APKSIGNER=$(find $ANDROID_SDK_ROOT/build-tools -name "apksigner" | sort -V | tail -1)
-          echo "Using apksigner: $APKSIGNER"
+          echo "apksigner: $APKSIGNER"
 
           $APKSIGNER sign \
-            --ks ScreenRecorder/debug.keystore \
+            --ks debug.keystore \
             --ks-key-alias androiddebugkey \
             --ks-pass pass:android \
             --key-pass pass:android \
-            --out ScreenRecorder/ScreenRecorder-signed.apk \
-            "$APK"
+            --out ScreenRecorder-signed.apk \
+            "${{ steps.find_apk.outputs.APK }}"
 
-          echo "Signed APK created:"
-          ls -lh ScreenRecorder/ScreenRecorder-signed.apk
+          ls -lh ScreenRecorder-signed.apk
+          $APKSIGNER verify --verbose ScreenRecorder-signed.apk
 
-          $APKSIGNER verify --verbose ScreenRecorder/ScreenRecorder-signed.apk
-
-      - name: Upload APK artifact
+      - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
           name: ScreenRecorder-APK
-          path: ScreenRecorder/ScreenRecorder-signed.apk
+          path: ScreenRecorder-signed.apk
           retention-days: 30
 
-      - name: Upload debug APK as fallback
+      - name: Upload debug APK (fallback)
         uses: actions/upload-artifact@v4
         with:
           name: ScreenRecorder-Debug-APK
